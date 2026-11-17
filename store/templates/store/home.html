@@ -34,6 +34,7 @@
       <span class="offer-code">USE CODE <b>{{ banner.code }}</b></span>
       <span class="offer-arrow">↗</span>
     </a>
+    {% empty %}<p class="empty-state">No active offers right now. Please check back soon.</p>
     {% endfor %}
   </div>
 </section>

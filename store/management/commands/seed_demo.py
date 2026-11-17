@@ -27,7 +27,7 @@ class Command(BaseCommand):
             ("Classic Cheese Pizza", "pizza", "A classic cheese pizza with a crisp crust.", "720.00", "10 inch", False, "https://images.unsplash.com/photo-1579751626657-72bc17010498?w=900"),
             ("Crispy Fried Chicken", "fried-chicken", "Golden crispy chicken pieces, freshly prepared.", "260.00", "2 pieces", True, "https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?w=900"),
             ("Chicken Strips", "fried-chicken", "Crunchy chicken strips with dipping sauce.", "320.00", "4 pieces", False, "https://images.unsplash.com/photo-1562967914-608f82629710?w=900"),
-            ("Taza Chicken Biryani", "rice-meals", "Fragrant rice served with a tender chicken piece.", "280.00", "plate", True, "https://images.unsplash.com/photo-1563379091339-03246963d96c?w=900"),
+            ("Taza Chicken Biryani", "rice-meals", "Fragrant rice served with a tender chicken piece.", "280.00", "plate", True, "https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=900&auto=format&fit=crop&q=85"),
             ("Beef Tehari", "rice-meals", "Traditional-style beef tehari with aromatic spices.", "330.00", "plate", False, "https://images.unsplash.com/photo-1512058564366-18510be2db19?w=900"),
             ("Fresh Lime", "drinks", "A chilled citrus drink.", "100.00", "glass", False, "https://images.unsplash.com/photo-1513558161293-cdaf765edfd7?w=900"),
             ("Cold Coffee", "drinks", "Creamy iced coffee.", "180.00", "glass", True, "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=900"),

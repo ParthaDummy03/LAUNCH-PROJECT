@@ -1,6 +1,7 @@
 (function () {
   const root = document.querySelector('.outlet-finder');
   if (!root) return;
+  const translate = (text) => window.tazaTranslate ? window.tazaTranslate(text) : text;
   const apiUrl = root.dataset.apiUrl;
   const mode = root.dataset.mode || 'DINE_IN';
   const list = document.getElementById('outletList');
@@ -18,8 +19,9 @@
 
   function initMap() {
     const mapElement = document.getElementById('outletMap');
-    if (!mapElement || !window.L) {
-      mapElement.textContent = 'Map could not load. You can still select an outlet from the list.';
+    if (!mapElement) return;
+    if (!window.L) {
+      mapElement.textContent = translate('Map could not load. You can still select an outlet from the list.');
       return;
     }
     map = L.map(mapElement).setView([22.3569, 91.7832], 12); // Demo map centre: Chattogram city.
@@ -43,7 +45,7 @@
     const card = element('article', 'outlet-card');
     const top = element('div', 'outlet-card-top');
     top.append(element('span', 'outlet-pin', String(index + 1).padStart(2, '0')));
-    top.append(element('span', 'outlet-area', outlet.area || 'TAZA OUTLET'));
+    top.append(element('span', 'outlet-area', outlet.area || translate('TAZA OUTLET')));
     card.append(top);
     card.append(element('h3', '', outlet.name));
     card.append(element('p', '', outlet.address));
@@ -52,17 +54,17 @@
     card.append(phone);
     card.append(element('small', '', outlet.opening_hours));
     if (outlet.distance_km !== null && outlet.distance_km !== undefined) {
-      card.append(element('small', 'outlet-distance', outlet.distance_km.toFixed(2) + ' km away'));
+      card.append(element('small', 'outlet-distance', outlet.distance_km.toFixed(2) + ' ' + translate('km away')));
     }
     const form = element('form');
     form.method = 'post';
     form.action = root.dataset.selectUrlTemplate.replace('999999', outlet.id);
     const token = element('input'); token.type = 'hidden'; token.name = 'csrfmiddlewaretoken'; token.value = csrfToken;
     const modeInput = element('input'); modeInput.type = 'hidden'; modeInput.name = 'mode'; modeInput.value = mode;
-    const button = element('button', 'button button-outline button-full', 'Select this outlet →'); button.type = 'submit';
+    const button = element('button', 'button button-outline button-full', translate('Select this outlet →')); button.type = 'submit';
     form.append(token, modeInput, button);
     card.append(form);
-    if (outlet.is_demo) card.append(element('em', 'demo-tag', 'DEMO LOCATION · REPLACE IN ADMIN'));
+    if (outlet.is_demo) card.append(element('em', 'demo-tag', translate('DEMO LOCATION · REPLACE IN ADMIN')));
     return card;
   }
 
@@ -71,7 +73,7 @@
     list.replaceChildren();
     count.textContent = String(rows.length);
     if (!rows.length) {
-      list.append(element('div', 'empty-state', 'No outlets found in this radius. Increase the search radius or view all outlets.'));
+      list.append(element('div', 'empty-state', translate('No outlets found in this radius. Increase the search radius or view all outlets.')));
     } else {
       rows.forEach((outlet, index) => list.append(buildOutletCard(outlet, index)));
     }
@@ -97,11 +99,11 @@
     if (userPoint) { params.set('lat', userPoint.lat); params.set('lng', userPoint.lng); }
     try {
       const response = await fetch(apiUrl + '?' + params.toString(), { headers: { 'Accept': 'application/json' } });
-      if (!response.ok) throw new Error('Could not retrieve outlets.');
+      if (!response.ok) throw new Error(translate('Could not retrieve outlets.'));
       const data = await response.json();
       renderOutlets(data.results || []);
     } catch (error) {
-      locationMessage.textContent = 'Could not refresh nearby outlets. The default list remains available; check your internet connection and try again.';
+      locationMessage.textContent = translate('Could not refresh nearby outlets. The default list remains available; check your internet connection and try again.');
     }
   }
 
@@ -117,28 +119,28 @@
 
   function requestLocation() {
     if (!navigator.geolocation) {
-      locationMessage.textContent = 'Your browser does not support location access. Choose an outlet manually from the list.';
+      locationMessage.textContent = translate('Your browser does not support location access. Choose an outlet manually from the list.');
       return;
     }
     locationButton.disabled = true;
-    locationButton.textContent = 'Finding you…';
-    locationMessage.textContent = 'Waiting for browser location permission…';
+    locationButton.textContent = translate('Finding you…');
+    locationMessage.textContent = translate('Waiting for browser location permission…');
     navigator.geolocation.getCurrentPosition((position) => {
       userPoint = { lat: position.coords.latitude, lng: position.coords.longitude };
-      locationMessage.textContent = 'Location found. Showing outlets within ' + radiusRange.value + ' km of your current position.';
+      locationMessage.textContent = translate('Location found. Showing outlets within') + ' ' + radiusRange.value + ' ' + translate('km of your current position.');
       locationButton.disabled = false;
-      locationButton.textContent = 'Location found ✓';
+      locationButton.textContent = translate('Location found ✓');
       updateRadiusCircle();
       loadOutlets();
     }, (error) => {
       const messages = {
-        1: 'Location permission was denied. You can still select an outlet manually from the list.',
-        2: 'Your location is unavailable. Check device location settings or select manually.',
-        3: 'The location request timed out. Try again or select an outlet manually.'
+        1: translate('Location permission was denied. You can still select an outlet manually from the list.'),
+        2: translate('Your location is unavailable. Check device location settings or select manually.'),
+        3: translate('The location request timed out. Try again or select an outlet manually.')
       };
-      locationMessage.textContent = messages[error.code] || 'Could not get your location. Select an outlet manually.';
+      locationMessage.textContent = messages[error.code] || translate('Could not get your location. Select an outlet manually.');
       locationButton.disabled = false;
-      locationButton.textContent = 'Try location again ↗';
+      locationButton.textContent = translate('Try location again ↗');
     }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
   }
 

@@ -177,7 +177,20 @@ python manage.py seed_demo
 
 The MySQL database is separate from the SQLite database. Keep `DB_ENGINE=sqlite` when you want to run the SQLite version again.
 
-## 9. Payment safety
+## 9. Weather and menu assistant widgets
+
+The shared site layout includes a weather card and a Groq-powered menu assistant. To enable them, set API keys in the same PowerShell session before starting Django:
+
+```powershell
+$env:OPENWEATHER_API_KEY="your-openweather-api-key"
+$env:GROQ_API_KEY="your-groq-api-key"
+$env:GROQ_MODEL="openai/gpt-oss-20b"
+python manage.py runserver
+```
+
+Create keys with OpenWeather and xAI, and keep them server-side; do not put them in JavaScript or commit them. Without a key, the corresponding widget displays a configuration message. The weather card initially shows Chattogram weather; visitors can choose to share their browser location for local weather. The assistant answers menu and ordering questions and directs visitors to the menu for current prices and availability.
+
+## 10. Payment safety
 
 Cash on delivery and pay-at-outlet are workflow options. The bKash and card entries are **demo-only**: selecting them marks the sample order as paid for a classroom demonstration, but no real transaction takes place. The project does not ask for or store card numbers, CVV, PINs or banking passwords. For real online payments, integrate a provider's official hosted checkout and verify payment callbacks on the server.
 

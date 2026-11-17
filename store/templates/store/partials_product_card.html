@@ -8,7 +8,7 @@
     <h3>{{ product.name }}</h3>
     <p>{{ product.description|default:"Prepared fresh when you order."|truncatechars:76 }}</p>
     <div class="product-card-bottom"><div><strong>৳{{ product.price }}</strong><small>/ {{ product.unit_label }}</small></div>
-      <form class="product-add-form" method="post" action="{% url 'add_to_cart' product.id %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.path }}"><label class="sr-only" for="product-qty-{{ product.id }}">Quantity</label><input id="product-qty-{{ product.id }}" type="number" name="quantity" min="1" max="20" value="1"><button class="add-button" type="submit" aria-label="Add {{ product.name }} to cart">+</button></form>
+      <form class="product-add-form" method="post" action="{% url 'add_to_cart' product.id %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.path }}"><label class="sr-only" for="product-qty-{{ product.id }}">Quantity</label><input id="product-qty-{{ product.id }}" type="number" name="quantity" min="1" max="20" value="1"><button class="add-button" type="submit" aria-label="Add to cart">+</button></form>
     </div>
   </div>
 </article>

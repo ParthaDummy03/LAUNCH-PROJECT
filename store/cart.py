@@ -19,7 +19,7 @@ def get_cart(request):
     return cart
 
 
-def cart_details():
+def cart_details(request):
     cart = get_cart(request)
     products = Product.objects.filter(id__in=cart.keys(), is_available=True).select_related("category")
     items = []
@@ -27,7 +27,7 @@ def cart_details():
     for product in products:
         quantity = cart.get(str(product.id), 0)
         line_total = product.price * quantity
-        subtotalrequest += line_total
+        subtotal += line_total
         items.append({"product": product, "quantity": quantity, "line_total": line_total})
     # Remove deleted/unavailable products from the session cart.
     valid_ids = {str(item["product"].id) for item in items}

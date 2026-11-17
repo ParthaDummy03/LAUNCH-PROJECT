@@ -3,6 +3,8 @@ from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.views import LoginView
+from django.db import transaction
+from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -12,16 +14,39 @@ from .forms import CheckoutForm, FeedbackForm, SignUpForm
 from .models import Category, Coupon, Order, OrderItem, Outlet, Product
 
 DELIVERY_FEE = Decimal("60.00")
+GUEST_ORDERS_SESSION_KEY = "taza_guest_orders"
+
+
+def active_coupons():
+    now = timezone.now()
+    return Coupon.objects.filter(active=True).filter(
+        Q(starts_at__isnull=True) | Q(starts_at__lte=now),
+        Q(ends_at__isnull=True) | Q(ends_at__gte=now),
+    )
 
 
 def home(request):
     categories = Category.objects.filter(is_active=True)
     featured_products = Product.objects.filter(is_available=True, is_featured=True).select_related("category")[:8]
-    banners = [
-        {"eyebrow": "FIRST ORDER OFFER", "title": "A little extra joy in every bite.", "detail": "Enjoy 10% off your first Taza order.", "code": "WELCOME10", "class": "banner-one"},
-        {"eyebrow": "FAMILY TIME", "title": "Make room for one more slice.", "detail": "Build your meal, share the moment.", "code": "FAMILYFEAST", "class": "banner-two"},
-        {"eyebrow": "TASTE THE DIFFERENCE", "title": "Freshly made. Happily delivered.", "detail": "Discover favourites from Taza Food Corner.", "code": "TAZA10", "class": "banner-three"},
-    ]
+    coupons = active_coupons().order_by("code")[:3]
+    offer_styles = {
+        "WELCOME10": ("FIRST ORDER OFFER", "A little extra joy in every bite.", "banner-one"),
+        "FAMILYFEAST": ("FAMILY TIME", "Make room for one more slice.", "banner-two"),
+        "TAZA50": ("TAZA FAVOURITE", "Make your next meal a Taza meal.", "banner-three"),
+    }
+    banners = []
+    for coupon in coupons:
+        eyebrow, title, style = offer_styles.get(
+            coupon.code,
+            ("CURRENT OFFER", coupon.description or f"Save with {coupon.code}.", "banner-three"),
+        )
+        banners.append({
+            "eyebrow": eyebrow,
+            "title": title,
+            "detail": coupon.description or "Add this code at checkout to redeem your offer.",
+            "code": coupon.code,
+            "class": style,
+        })
     return render(request, "store/home.html", {"categories": categories, "featured_products": featured_products, "banners": banners})
 
 
@@ -64,7 +89,7 @@ def cart_page(request):
     items, subtotal = cart_details(request)
     mode = request.session.get("taza_fulfilment", Order.DELIVERY)
     delivery_fee = DELIVERY_FEE if items and mode == Order.DELIVERY else Decimal("0.00")
-    fee_label = "Estimated delivery" if mode == Order.DELIVERY else "Dine-in delivery fee"
+    fee_label = "Estimated delivery" if mode == Order.DELIVERY else "Dine-in fee"
     return render(request, "store/cart.html", {"items": items, "subtotal": subtotal, "delivery_fee": delivery_fee, "total": subtotal + delivery_fee, "fee_label": fee_label})
 
 
@@ -113,7 +138,7 @@ def select_outlet(request, outlet_id):
     messages.success(request, f"{outlet.name} selected.")
     if get_cart(request):
         return redirect("checkout")
-    return redirect("menu" if mode == Order.DELIVERY else "cart")
+    return redirect("menu")
 
 
 def checkout(request):
@@ -149,35 +174,50 @@ def checkout(request):
                         coupon = candidate
                         discount = candidate.calculate_discount(subtotal)
                     else:
-                        messages.warning(request, "That coupon is not valid for this order.")
+                        form.add_error("coupon_code", "That coupon is not valid for this order.")
                 except Coupon.DoesNotExist:
-                    messages.warning(request, "Coupon code not found.")
+                    form.add_error("coupon_code", "Coupon code not found.")
+                if form.errors:
+                    return render(request, "store/checkout.html", {
+                        "form": form,
+                        "items": items,
+                        "subtotal": subtotal,
+                        "delivery_fee": delivery_fee,
+                    })
             actual_delivery_fee = delivery_fee if mode == Order.DELIVERY else Decimal("0.00")
             total = max(Decimal("0.00"), subtotal + actual_delivery_fee - discount)
-            order = Order.objects.create(
-                customer=request.user if request.user.is_authenticated else None,
-                customer_name=form.cleaned_data["customer_name"],
-                phone=form.cleaned_data["phone"],
-                fulfilment=mode,
-                outlet=outlet if mode == Order.DINE_IN or outlet else None,
-                delivery_address=address if mode == Order.DELIVERY else "",
-                special_instructions=form.cleaned_data["special_instructions"],
-                coupon=coupon,
-                coupon_code=coupon.code if coupon else "",
-                subtotal=subtotal,
-                delivery_fee=actual_delivery_fee,
-                discount=discount,
-                total=total,
-                status=Order.CONFIRMED,
-            )
-            for item in items:
-                OrderItem.objects.create(
-                    order=order,
-                    product=item["product"],
-                    product_name=item["product"].name,
-                    unit_price=item["product"].price,
-                    quantity=item["quantity"],
+            with transaction.atomic():
+                order = Order.objects.create(
+                    customer=request.user if request.user.is_authenticated else None,
+                    customer_name=form.cleaned_data["customer_name"],
+                    phone=form.cleaned_data["phone"],
+                    fulfilment=mode,
+                    outlet=outlet if mode == Order.DINE_IN or outlet else None,
+                    delivery_address=address if mode == Order.DELIVERY else "",
+                    special_instructions=form.cleaned_data["special_instructions"],
+                    coupon=coupon,
+                    coupon_code=coupon.code if coupon else "",
+                    subtotal=subtotal,
+                    delivery_fee=actual_delivery_fee,
+                    discount=discount,
+                    total=total,
+                    status=Order.CONFIRMED,
                 )
+                OrderItem.objects.bulk_create([
+                    OrderItem(
+                        order=order,
+                        product=item["product"],
+                        product_name=item["product"].name,
+                        unit_price=item["product"].price,
+                        quantity=item["quantity"],
+                    )
+                    for item in items
+                ])
+            if not request.user.is_authenticated:
+                guest_orders = request.session.get(GUEST_ORDERS_SESSION_KEY, [])
+                if not isinstance(guest_orders, list):
+                    guest_orders = []
+                request.session[GUEST_ORDERS_SESSION_KEY] = (guest_orders + [order.order_number])[-20:]
             request.session[SESSION_CART_KEY] = {}
             request.session.pop("taza_selected_outlet", None)
             request.session.pop("taza_fulfilment", None)
@@ -196,14 +236,32 @@ def get_order_or_404(order_number):
     return get_object_or_404(Order.objects.prefetch_related("items").select_related("outlet"), order_number=order_number)
 
 
-def order_confirmed(request, order_number):
+def get_order_for_request(request, order_number):
     order = get_order_or_404(order_number)
+    if order.customer_id:
+        if not request.user.is_authenticated or order.customer_id != request.user.id:
+            raise Http404
+    else:
+        guest_orders = request.session.get(GUEST_ORDERS_SESSION_KEY, [])
+        if not isinstance(guest_orders, list) or order_number not in guest_orders:
+            raise Http404
+    return order
+
+
+def order_confirmed(request, order_number):
+    order = get_order_for_request(request, order_number)
     return render(request, "store/order_confirmed.html", {"order": order})
 
 
 @require_POST
 def choose_payment(request, order_number):
-    order = get_order_or_404(order_number)
+    order = get_order_for_request(request, order_number)
+    if order.payment_status == "PAID":
+        messages.info(request, "Payment has already been recorded for this order.")
+        return redirect("order_confirmed", order_number=order.order_number)
+    if order.status in {Order.CANCELLED, Order.COMPLETED}:
+        messages.error(request, "Payment cannot be changed for a completed or cancelled order.")
+        return redirect("order_confirmed", order_number=order.order_number)
     method = request.POST.get("payment_method", "").upper()
     valid_methods = {choice[0] for choice in Order.PAYMENT_CHOICES}
     if method not in valid_methods:
@@ -227,7 +285,13 @@ def choose_payment(request, order_number):
 
 
 def payment(request, order_number):
-    order = get_order_or_404(order_number)
+    order = get_order_for_request(request, order_number)
+    if order.payment_status == "PAID":
+        messages.info(request, "Payment has already been recorded for this order.")
+        return redirect("order_confirmed", order_number=order.order_number)
+    if order.status in {Order.CANCELLED, Order.COMPLETED}:
+        messages.error(request, "Payment cannot be changed for a completed or cancelled order.")
+        return redirect("order_confirmed", order_number=order.order_number)
     return render(request, "store/payment.html", {"order": order})
 
 
@@ -248,12 +312,12 @@ def signup(request):
 
 
 def offers(request):
-    coupons = Coupon.objects.filter(active=True)
+    coupons = active_coupons().order_by("code")
     return render(request, "store/offers.html", {"coupons": coupons})
 
 
 def coupons(request):
-    return render(request, "store/coupons.html", {"coupons": Coupon.objects.filter(active=True)})
+    return render(request, "store/coupons.html", {"coupons": active_coupons()})
 
 
 def feedback(request):

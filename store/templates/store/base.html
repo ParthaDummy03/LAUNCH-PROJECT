@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'store/style.css' %}">
+  <link rel="stylesheet" href="{% static 'store/style.css' %}?v=20261118-bn4">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -60,6 +60,20 @@
 
   <main>{% block content %}{% endblock %}</main>
 
+  <section class="weather-widget" aria-label="Local weather">
+    <div class="weather-icon" id="w-icon" aria-hidden="true">⏳</div>
+    <div class="weather-copy"><strong id="w-temp">--°C</strong><span id="w-desc" role="status">Loading weather…</span><button id="w-location" type="button">Use my location</button></div>
+  </section>
+  <section class="chat-widget" aria-label="Taza menu assistant">
+    <div class="chat-heading"><strong>Ask Taza</strong><span>Menu assistant</span></div>
+    <div id="chat-log" class="chat-log" role="log" aria-live="polite"><div class="chat-message chat-bot">Hi! Ask me about the menu, delivery, or dine-in.</div></div>
+    <form id="chat-form" class="chat-form">
+      <label class="sr-only" for="chat-in">Ask about the menu</label>
+      <input id="chat-in" name="message" maxlength="1000" placeholder="Ask about the menu…" autocomplete="off" required>
+      <button id="chat-send" class="chat-send" type="submit" aria-label="Send message">Send</button>
+    </form>
+  </section>
+
   <footer class="site-footer">
     <div class="footer-main container">
       <div class="footer-brand-col">
@@ -73,7 +87,9 @@
     </div>
     <div class="footer-bottom"><div class="container"><span>© {% now "Y" %} TAZA FOOD CORNER. ALL RIGHTS RESERVED.</span><span>MADE WITH CARE · RED / BLACK / WHITE</span></div></div>
   </footer>
-  <script src="{% static 'store/app.js' %}"></script>
+  <script src="{% static 'store/app.js' %}?v=20261118-bn7"></script>
+  <script>const CSRF = "{{ csrf_token }}";</script>
+  <script src="{% static 'store/widgets.js' %}?v=20261118-bn4" defer></script>
   {% block extra_js %}{% endblock %}
 </body>
 </html>

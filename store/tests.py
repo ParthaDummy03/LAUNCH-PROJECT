@@ -1,8 +1,10 @@
 from decimal import Decimal
-from django.test import TestCase
+from datetime import timedelta
+from django.test import Client, TestCase
 from django.urls import reverse
+from django.utils import timezone
 from .api_views import distance_km
-from .models import Category, Product, Outlet, Order
+from .models import Category, Product, Outlet, Order, Coupon
 
 
 class TazaWebsiteTests(TestCase):
@@ -34,6 +36,14 @@ class TazaWebsiteTests(TestCase):
         response = self.client.get(reverse("home"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "TAZA FOOD CORNER")
+
+    def test_public_pages_render(self):
+        for route in (
+            "home", "menu", "cart", "outlets", "offers", "coupons", "feedback",
+            "faq", "contact", "about", "opening_hours", "signup", "login",
+        ):
+            with self.subTest(route=route):
+                self.assertEqual(self.client.get(reverse(route)).status_code, 200)
 
     def test_products_api_returns_active_item(self):
         response = self.client.get(reverse("api_products"))
@@ -78,3 +88,107 @@ class TazaWebsiteTests(TestCase):
         order = Order.objects.get(customer_name="Test Customer")
         self.assertEqual(order.total, Decimal("310.00"))
         self.assertEqual(order.items.count(), 1)
+
+    def test_guest_order_pages_are_private_to_the_ordering_session(self):
+        self.client.post(reverse("add_to_cart", args=[self.product.id]), {"quantity": "1"})
+        self.client.post(reverse("checkout"), {
+            "customer_name": "Test Customer",
+            "phone": "01700000000",
+            "fulfilment": Order.DELIVERY,
+            "delivery_address": "Test Road, Chattogram",
+            "coupon_code": "",
+            "special_instructions": "",
+        })
+        order = Order.objects.get(customer_name="Test Customer")
+        confirmation_url = reverse("order_confirmed", args=[order.order_number])
+        payment_url = reverse("payment", args=[order.order_number])
+        self.assertEqual(self.client.get(confirmation_url).status_code, 200)
+
+        other_client = Client()
+        self.assertEqual(other_client.get(confirmation_url).status_code, 404)
+        self.assertEqual(other_client.get(payment_url).status_code, 404)
+        self.assertEqual(other_client.post(reverse("choose_payment", args=[order.order_number]), {
+            "payment_method": "CARD_DEMO",
+        }).status_code, 404)
+        order.refresh_from_db()
+        self.assertEqual(order.payment_status, "PENDING")
+
+    def test_cancelled_order_cannot_be_reactivated_by_demo_payment(self):
+        self.client.post(reverse("add_to_cart", args=[self.product.id]), {"quantity": "1"})
+        self.client.post(reverse("checkout"), {
+            "customer_name": "Cancelled Customer",
+            "phone": "01700000000",
+            "fulfilment": Order.DELIVERY,
+            "delivery_address": "Test Road, Chattogram",
+            "coupon_code": "",
+            "special_instructions": "",
+        })
+        order = Order.objects.get(customer_name="Cancelled Customer")
+        order.status = Order.CANCELLED
+        order.save(update_fields=["status", "updated_at"])
+        response = self.client.post(reverse("choose_payment", args=[order.order_number]), {
+            "payment_method": "CARD_DEMO",
+        })
+        self.assertRedirects(response, reverse("order_confirmed", args=[order.order_number]))
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.CANCELLED)
+        self.assertEqual(order.payment_status, "PENDING")
+
+    def test_selecting_dine_in_outlet_without_cart_continues_to_menu(self):
+        response = self.client.post(reverse("select_outlet", args=[self.outlet.id]), {"mode": Order.DINE_IN})
+        self.assertRedirects(response, reverse("menu"))
+        self.assertEqual(self.client.session["taza_selected_outlet"], self.outlet.id)
+        self.assertEqual(self.client.session["taza_fulfilment"], Order.DINE_IN)
+
+    def test_dine_in_flow_keeps_selected_outlet_and_charges_no_delivery_fee(self):
+        self.client.post(reverse("select_outlet", args=[self.outlet.id]), {"mode": Order.DINE_IN})
+        self.client.post(reverse("add_to_cart", args=[self.product.id]), {"quantity": "1"})
+        response = self.client.post(reverse("checkout"), {
+            "customer_name": "Dine In Customer",
+            "phone": "01700000000",
+            "fulfilment": Order.DINE_IN,
+            "outlet": self.outlet.id,
+            "delivery_address": "",
+            "coupon_code": "",
+            "special_instructions": "",
+        })
+        self.assertEqual(response.status_code, 302)
+        order = Order.objects.get(customer_name="Dine In Customer")
+        self.assertEqual(order.outlet, self.outlet)
+        self.assertEqual(order.delivery_fee, Decimal("0.00"))
+        self.assertEqual(order.total, Decimal("250.00"))
+
+    def test_invalid_coupon_keeps_order_at_checkout(self):
+        self.client.post(reverse("add_to_cart", args=[self.product.id]), {"quantity": "1"})
+        response = self.client.post(reverse("checkout"), {
+            "customer_name": "Test Customer",
+            "phone": "01700000000",
+            "fulfilment": Order.DELIVERY,
+            "delivery_address": "Test Road, Chattogram",
+            "coupon_code": "DOESNOTEXIST",
+            "special_instructions": "",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Coupon code not found.")
+        self.assertFalse(Order.objects.exists())
+
+    def test_coupon_pages_hide_not_yet_active_and_expired_coupons(self):
+        Coupon.objects.create(
+            code="FUTURE", description="Future coupon", discount_value=Decimal("10"),
+            starts_at=timezone.now() + timedelta(days=1),
+        )
+        Coupon.objects.create(
+            code="EXPIRED", description="Expired coupon", discount_value=Decimal("10"),
+            ends_at=timezone.now() - timedelta(days=1),
+        )
+        for route in ("offers", "coupons"):
+            response = self.client.get(reverse(route))
+            self.assertEqual(response.status_code, 200)
+            self.assertNotContains(response, "FUTURE")
+            self.assertNotContains(response, "EXPIRED")
+
+    def test_nearby_api_rejects_partial_or_invalid_coordinates(self):
+        response = self.client.get(reverse("api_nearby_outlets"), {"lat": "22.3"})
+        self.assertEqual(response.status_code, 400)
+        response = self.client.get(reverse("api_nearby_outlets"), {"lat": "bad", "lng": "91.7"})
+        self.assertEqual(response.status_code, 400)

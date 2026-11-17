@@ -1,9 +1,25 @@
 from pathlib import Path
 import os
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-change-this-key-before-deployment")
+# Load optional local secrets from the git-ignored .env file without requiring
+# a third-party dotenv package. Values already exported by the OS take priority.
+local_env = BASE_DIR / ".env"
+if local_env.is_file():
+    for line in local_env.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            name, value = line.split("=", 1)
+            os.environ.setdefault(name.strip(), value.strip().strip("\"'"))
 DEBUG = os.environ.get("DJANGO_DEBUG", "True").lower() in {"1", "true", "yes"}
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "").strip()
+if not SECRET_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured("Set DJANGO_SECRET_KEY when DJANGO_DEBUG is disabled.")
+    SECRET_KEY = "dev-only-change-this-key-before-deployment"
+elif not DEBUG and SECRET_KEY.startswith(("dev-only-", "replace-this-")):
+    raise ImproperlyConfigured("Replace the example DJANGO_SECRET_KEY before disabling Django debug mode.")
 ALLOWED_HOSTS = [host.strip() for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if host.strip()]
 
 INSTALLED_APPS = [
