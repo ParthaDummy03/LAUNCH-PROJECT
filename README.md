@@ -91,6 +91,10 @@ python manage.py runserver
 
 Open the website at <http://127.0.0.1:8000/>.
 
+
+Demo
+https://tazafooodcornerr.vercel.app/
+
 Admin panel: <http://127.0.0.1:8000/admin/>.
 
 ## 4. Demo user flow
