@@ -100,4 +100,27 @@
       input.focus();
     }
   });
+
+  // Weather: keep it closed for the rest of this tab session.
+  const weatherBox = document.getElementById("weather");
+  document.getElementById("w-close").addEventListener("click", () => {
+    weatherBox.style.display = "none";
+    try { sessionStorage.setItem("weatherClosed", "1"); } catch (error) {}
+  });
+  try {
+    if (sessionStorage.getItem("weatherClosed")) weatherBox.style.display = "none";
+  } catch (error) {}
+
+  // Chat: collapse to a floating button and allow reopening.
+  const chatBox = document.getElementById("chat");
+  const chatOpen = document.getElementById("chat-open");
+  function setChat(open) {
+    chatBox.style.display = open ? "" : "none";
+    chatOpen.style.display = open ? "none" : "block";
+  }
+  document.getElementById("chat-close").addEventListener("click", () => setChat(false));
+  chatOpen.addEventListener("click", () => setChat(true));
+
+  // Start collapsed on narrow screens.
+  if (window.innerWidth < 600) setChat(false);
 })();
